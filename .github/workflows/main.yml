@@ -8,7 +8,7 @@ on:
     branches:
       - main
     paths:
-      - "collect_jobs.py"
+      - ".github/workflows/collect_jobs.py"
       - "sources.json"
       - "requirements.txt"
 
@@ -32,7 +32,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Collect FINJOB postings
-        run: python collect_jobs.py
+        run: python .github/workflows/collect_jobs.py
 
       - name: Commit updated jobs
         run: |
