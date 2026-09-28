@@ -1,5 +1,6 @@
 import json
 import re
+import hashlib
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urljoin
@@ -8,19 +9,8 @@ import requests
 from bs4 import BeautifulSoup
 
 
-# --------------------------------------------------
-# 경로 설정
-# collect_jobs.py 위치:
-# finjob/.github/workflows/collect_jobs.py
-#
-# 실제 데이터 파일 위치:
-# finjob/sources.json
-# finjob/jobs.json
-# --------------------------------------------------
-
 ROOT_DIR = Path(__file__).resolve().parents[2]
 
-SOURCES_FILE = ROOT_DIR / "sources.json"
 JOBS_FILE = ROOT_DIR / "jobs.json"
 
 
@@ -32,127 +22,147 @@ HEADERS = {
 }
 
 
+SHINHAN_URL = "https://recruit.shinhansec.com/recruit/list.do"
+
+
 def clean(text):
     return re.sub(r"\s+", " ", text or "").strip()
 
 
-def load_sources():
-    if not SOURCES_FILE.exists():
-        print(f"[ERROR] sources.json not found: {SOURCES_FILE}")
-        return []
-
-    with open(SOURCES_FILE, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    if isinstance(data, dict):
-        return data.get("sources", [])
-
-    if isinstance(data, list):
-        return data
-
-    return []
+def make_id(company, title, url):
+    value = f"{company}|{title}|{url}"
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:14]
 
 
-def load_existing_jobs():
-    if not JOBS_FILE.exists():
-        return []
-
-    try:
-        with open(JOBS_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        if isinstance(data, list):
-            return data
-
-    except Exception as e:
-        print(f"[WARNING] Could not read existing jobs.json: {e}")
-
-    return []
-
-
-def classify(title):
+def classify_role(title):
     text = title.lower()
 
-    categories = {
-        "리서치": [
+    categories = [
+        (
             "리서치",
-            "research",
-            "analyst",
-            "애널리스트",
-        ],
-        "IB": [
-            "ib",
-            "investment banking",
-            "기업금융",
-            "ipo",
-            "m&a",
-        ],
-        "인프라·대체투자": [
-            "인프라",
-            "대체투자",
-            "alternative",
-            "infrastructure",
-            "항공기",
-            "에너지",
-            "신재생",
-        ],
-        "PF·부동산": [
-            "pf",
-            "project finance",
-            "부동산",
-            "real estate",
-        ],
-        "FICC": [
-            "ficc",
-            "채권",
-            "fixed income",
-            "외환",
-            "fx",
-            "credit",
-        ],
-        "자산운용": [
+            [
+                "리서치",
+                "research",
+                "ra ",
+                "ra공개채용",
+                "research assistant",
+            ],
+        ),
+        (
+            "IB",
+            [
+                "기업금융",
+                "investment banking",
+                " ib",
+                "ib ",
+                "ipo",
+                "m&a",
+                "인수금융",
+            ],
+        ),
+        (
+            "PF·부동산",
+            [
+                "pf",
+                "부동산",
+                "project finance",
+                "구조화금융",
+            ],
+        ),
+        (
+            "FICC",
+            [
+                "채권",
+                "ficc",
+                "fixed income",
+                "외환",
+                "fx",
+                "크레딧",
+                "credit",
+            ],
+        ),
+        (
+            "인프라·대체투자",
+            [
+                "인프라",
+                "대체투자",
+                "alternative",
+                "infrastructure",
+                "신재생",
+                "에너지",
+            ],
+        ),
+        (
             "자산운용",
-            "운용",
-            "portfolio",
-            "fund manager",
-        ],
-        "PE·VC": [
-            "private equity",
-            "venture capital",
-            "pe",
-            "vc",
-        ],
-        "리스크": [
+            [
+                "운용",
+                "패시브",
+                "portfolio",
+                "랩",
+                "신탁",
+            ],
+        ),
+        (
             "리스크",
-            "risk",
-            "준법",
-            "compliance",
-        ],
-    }
+            [
+                "리스크",
+                "risk",
+                "준법",
+                "compliance",
+                "내부통제",
+            ],
+        ),
+        (
+            "디지털자산",
+            [
+                "디지털자산",
+                "digital asset",
+                "가상자산",
+            ],
+        ),
+    ]
 
-    for category, keywords in categories.items():
+    for category, keywords in categories:
         if any(keyword in text for keyword in keywords):
             return category
 
     return "기타 금융"
 
 
-def collect_source(source):
-    url = source.get("url")
-    company = (
-        source.get("company")
-        or source.get("name")
-        or "금융회사"
+def classify_type(text):
+    text = text.lower()
+
+    if "인턴" in text:
+        return "인턴"
+
+    if "신입" in text:
+        return "신입"
+
+    if "경력" in text:
+        return "경력"
+
+    return "기타"
+
+
+def extract_deadline(text):
+    match = re.search(
+        r"(20\d{2})[.\-/](\d{1,2})[.\-/](\d{1,2})",
+        text,
     )
 
-    if not url:
-        print(f"[SKIP] URL 없음: {company}")
-        return []
+    if not match:
+        return None
 
+    year, month, day = match.groups()
+
+    return f"{year}-{int(month):02d}-{int(day):02d}"
+
+
+def collect_shinhan():
     response = requests.get(
-        url,
+        SHINHAN_URL,
         headers=HEADERS,
-        timeout=20,
+        timeout=30,
     )
 
     response.raise_for_status()
@@ -163,93 +173,81 @@ def collect_source(source):
     )
 
     jobs = []
-
-    keywords = [
-        "채용",
-        "인턴",
-        "경력",
-        "신입",
-        "리서치",
-        "투자",
-        "운용",
-        "IB",
-        "PF",
-        "FICC",
-        "analyst",
-        "research",
-    ]
+    seen = set()
 
     for link in soup.find_all("a", href=True):
 
-        title = clean(
+        href = link.get("href", "")
+
+        # 실제 채용 상세 페이지 링크만 허용
+        if "view.do" not in href:
+            continue
+
+        text = clean(
             link.get_text(
                 " ",
                 strip=True,
             )
         )
 
-        if len(title) < 5:
+        if not text:
             continue
 
-        if not any(
-            keyword.lower() in title.lower()
-            for keyword in keywords
-        ):
-            continue
-
-        job_url = urljoin(
-            url,
-            link["href"],
+        # 공고 상세 URL
+        url = urljoin(
+            SHINHAN_URL,
+            href,
         )
+
+        # URL 기준 중복 제거
+        if url in seen:
+            continue
+
+        seen.add(url)
+
+        # 부모 영역 전체 텍스트 확보
+        parent = link
+
+        for _ in range(4):
+            if parent.parent:
+                parent = parent.parent
+
+        full_text = clean(
+            parent.get_text(
+                " ",
+                strip=True,
+            )
+        )
+
+        title = text
+
+        # 지나치게 긴 링크 텍스트 방지
+        if len(title) > 120:
+            title = title[:120]
+
+        job_type = classify_type(full_text)
+        deadline = extract_deadline(full_text)
 
         jobs.append(
             {
-                "company": company,
-                "title": title,
-                "category": classify(title),
-                "url": job_url,
-                "source": f"{company} 공식 채용",
-                "collected_at": datetime.now().isoformat(
-                    timespec="seconds"
+                "id": make_id(
+                    "신한투자증권",
+                    title,
+                    url,
                 ),
+                "company": "신한투자증권",
+                "title": title,
+                "role": classify_role(title),
+                "type": job_type,
+                "deadline": deadline,
+                "posted": None,
+                "source": "신한투자증권 공식 채용",
+                "url": url,
+                "fresh": True,
             }
         )
 
     return jobs
-
-
-def deduplicate(jobs):
-    result = []
-    seen = set()
-
-    for job in jobs:
-
-        key = (
-            clean(
-                job.get(
-                    "company",
-                    "",
-                )
-            ).lower(),
-            clean(
-                job.get(
-                    "title",
-                    "",
-                )
-            ).lower(),
-            job.get(
-                "url",
-                "",
-            ),
-        )
-
-        if key in seen:
-            continue
-
-        seen.add(key)
-        result.append(job)
-
-    return result
 
 
 def save_jobs(jobs):
@@ -271,60 +269,50 @@ def main():
 
     print("=" * 50)
     print("FINJOB collector start")
-    print(f"Repository root: {ROOT_DIR}")
-    print(f"Sources file: {SOURCES_FILE}")
-    print(f"Jobs file: {JOBS_FILE}")
     print("=" * 50)
 
-    sources = load_sources()
-    existing_jobs = load_existing_jobs()
+    all_jobs = []
 
-    print(f"Sources: {len(sources)}")
-    print(f"Existing jobs: {len(existing_jobs)}")
+    try:
 
-    collected_jobs = []
+        shinhan_jobs = collect_shinhan()
 
-    for source in sources:
-
-        company = (
-            source.get("company")
-            or source.get("name")
-            or "source"
+        all_jobs.extend(
+            shinhan_jobs
         )
-
-        try:
-
-            jobs = collect_source(source)
-
-            collected_jobs.extend(jobs)
-
-            print(
-                f"[OK] {company}: "
-                f"{len(jobs)} jobs"
-            )
-
-        except Exception as e:
-
-            print(
-                f"[ERROR] {company}: {e}"
-            )
-
-    # 모든 사이트 수집 실패 시
-    # 기존 jobs.json을 보존
-    if collected_jobs:
-
-        final_jobs = deduplicate(
-            collected_jobs
-        )
-
-    else:
 
         print(
-            "[WARNING] 새 공고를 수집하지 못했습니다. "
-            "기존 jobs.json을 유지합니다."
+            f"[OK] 신한투자증권: "
+            f"{len(shinhan_jobs)} jobs"
         )
 
-        final_jobs = existing_jobs
+    except Exception as e:
+
+        print(
+            f"[ERROR] 신한투자증권: {e}"
+        )
+
+    if not all_jobs:
+
+        print(
+            "[WARNING] 실제 채용공고를 수집하지 못했습니다."
+        )
+
+        return
+
+    # URL 기준 최종 중복 제거
+    final_jobs = []
+    seen_urls = set()
+
+    for job in all_jobs:
+
+        url = job["url"]
+
+        if url in seen_urls:
+            continue
+
+        seen_urls.add(url)
+        final_jobs.append(job)
 
     save_jobs(final_jobs)
 
