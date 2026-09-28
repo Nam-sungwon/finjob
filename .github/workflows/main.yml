@@ -1,14 +1,43 @@
-name: FINJOB Test
+name: Update FINJOB Jobs
 
 on:
+  schedule:
+    - cron: "0 22 * * *"
+  workflow_dispatch:
   push:
     branches:
       - main
-  workflow_dispatch:
+    paths:
+      - "collect_jobs.py"
+      - "sources.json"
+      - "requirements.txt"
+
+permissions:
+  contents: write
 
 jobs:
-  test:
+  update-jobs:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Test FINJOB
-        run: echo "FINJOB Actions works"
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Collect FINJOB postings
+        run: python collect_jobs.py
+
+      - name: Commit updated jobs
+        run: |
+          git config user.name "finjob-bot"
+          git config user.email "actions@github.com"
+          git add jobs.json
+          git diff --cached --quiet || git commit -m "Update FINJOB job postings"
+          git push
