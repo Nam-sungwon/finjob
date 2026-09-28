@@ -25,7 +25,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Update job postings
-        run: python collect_jobs.py
+        run: python .github/workflows/collect_jobs.py
 
       - name: Commit updated jobs
         run: |
