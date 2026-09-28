@@ -4,6 +4,13 @@ on:
   schedule:
     - cron: "0 22 * * *"
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/collect_jobs.py"
+      - "sources.json"
+      - "requirements.txt"
 
 permissions:
   contents: write
