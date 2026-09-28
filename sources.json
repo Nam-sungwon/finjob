@@ -1,8 +1,23 @@
 [
-  {"name":"금융투자협회 회원사 채용","adapter":"kofia","priority":1,"enabled":true},
-  {"name":"신한투자증권 공식채용","adapter":"shinhan","priority":1,"enabled":true},
-  {"name":"KB증권 공식채용","adapter":"kb","priority":1,"enabled":true},
-  {"name":"삼성증권 채용안내","adapter":"samsung","priority":2,"enabled":true,"note":"Samsung Careers의 개별 공고가 JS 렌더링될 수 있어 공식 진입점 상태 확인용"},
-  {"name":"NH투자증권","adapter":"kofia","priority":1,"enabled":true,"note":"금투협 공고가 공식 Recruiter 원문 링크를 제공하므로 KOFIA 어댑터로 우선 커버"},
-  {"name":"미래에셋증권","adapter":"kofia","priority":2,"enabled":true,"note":"금투협 + 공식 채용 진입점 병행 확장 대상"}
+  {
+    "name": "신한투자증권 공식채용",
+    "company": "신한투자증권",
+    "url": "https://recruit.shinhansec.com/",
+    "priority": 1,
+    "enabled": true
+  },
+  {
+    "name": "삼성증권 채용안내",
+    "company": "삼성증권",
+    "url": "https://www.samsungcareers.com/subsid/detail/E40",
+    "priority": 1,
+    "enabled": true
+  },
+  {
+    "name": "미래에셋증권",
+    "company": "미래에셋증권",
+    "url": "https://securities.miraeasset.com/newir/view/pc/kr/main.jsp",
+    "priority": 2,
+    "enabled": true
+  }
 ]
